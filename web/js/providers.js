@@ -1,5 +1,5 @@
 // providers.js —— 供应商预设 + 通用 OpenAI 兼容 fetcher（含 SSE 流式解析 + 错误归因）
-import { kvGet, kvSet } from "./db.js?v=4";
+import { kvGet, kvSet } from "./db.js?v=5";
 
 export const PROVIDERS = {
   deepseek: {

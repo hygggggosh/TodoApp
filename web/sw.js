@@ -1,5 +1,5 @@
-const CACHE = "muse-v4";
-const V = "?v=4";
+const CACHE = "muse-v5";
+const V = "?v=5";
 const ASSETS = [
   "./",
   "./index.html" + V,

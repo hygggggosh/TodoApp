@@ -1,7 +1,7 @@
 // memoryExtractor.js —— 长期记忆自动提取：每次 assistant 回复后异步发起
-import { listMessages, addMemory, listMemories } from "./tools.js?v=4";
-import { loadSettings } from "./providers.js?v=4";
-import { streamChat } from "./providers.js?v=4";
+import { listMessages, addMemory, listMemories } from "./tools.js?v=5";
+import { loadSettings } from "./providers.js?v=5";
+import { streamChat } from "./providers.js?v=5";
 
 const EXTRACT_PROMPT = `从下列对话中提取**值得长期记住**的"事实/偏好/约定"。要求：\n` +
   `1. 必须是用户的明确陈述（不是助手承诺、不是临时事项）\n` +

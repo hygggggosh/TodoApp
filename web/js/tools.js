@@ -1,5 +1,5 @@
 // tools.js —— 领域操作 + function schema 定义（规则 Agent + LLM Agent 共用）
-import { open, uid, nowISO, get, getAll, put, del, clear } from "./db.js?v=4";
+import { open, uid, nowISO, get, getAll, put, del, clear } from "./db.js?v=5";
 
 /* ---------- 任务 ---------- */
 export async function listTasks({ includeDone = true } = {}) {

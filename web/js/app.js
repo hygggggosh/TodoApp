@@ -1,10 +1,10 @@
 // app.js —— UI 引导（v4: M1 真 Agent 集成）
-import { open, kvGet, kvSet } from "./db.js?v=4";
-import * as T from "./tools.js?v=4";
-import { PROVIDERS, DEFAULT_SETTINGS, loadSettings, saveSettings, listModels } from "./providers.js?v=4";
-import { handle, hooks } from "./agent.js?v=4";
-import { getUsageStats } from "./usage.js?v=4";
-import { maybeExtractMemories } from "./memoryExtractor.js?v=4";
+import { open, kvGet, kvSet } from "./db.js?v=5";
+import * as T from "./tools.js?v=5";
+import { PROVIDERS, DEFAULT_SETTINGS, loadSettings, saveSettings, listModels } from "./providers.js?v=5";
+import { handle, hooks } from "./agent.js?v=5";
+import { getUsageStats } from "./usage.js?v=5";
+import { maybeExtractMemories } from "./memoryExtractor.js?v=5";
 
 const $ = id => document.getElementById(id);
 let state = { sessionId: null, sessions: [], busy: false, currentAbort: null, lastActions: [] };

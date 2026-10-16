@@ -1,6 +1,6 @@
 // db.js —— IndexedDB 薄封装：所有个人数据都在本机
 const DB_NAME = "muse";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 let _db = null;
 
 export function uid() { return crypto.randomUUID(); }
@@ -33,6 +33,10 @@ export function open() {
       if (!db.objectStoreNames.contains("messages")) {
         const s = db.createObjectStore("messages", { keyPath: "id" });
         s.createIndex("sessionId", "sessionId");
+      }
+      if (!db.objectStoreNames.contains("usage")) {
+        const s = db.createObjectStore("usage", { keyPath: "id" });
+        s.createIndex("ts", "ts");
       }
     };
     req.onsuccess = () => { _db = req.result; resolve(_db); };

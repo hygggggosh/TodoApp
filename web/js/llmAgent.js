@@ -1,7 +1,7 @@
 // llmAgent.js —— LLM Agent：function-calling 循环 + 流式输出
-import * as T from "./tools.js?v=4";
-import { streamChat, loadSettings } from "./providers.js?v=4";
-import { logUsage } from "./usage.js?v=4";
+import * as T from "./tools.js?v=5";
+import { streamChat, loadSettings } from "./providers.js?v=5";
+import { logUsage } from "./usage.js?v=5";
 
 const SYSTEM_PROMPT = `你是 Muse，一位本地优先的个人助手。\n` +
   `规则：\n` +
