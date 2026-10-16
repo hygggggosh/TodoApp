@@ -1,8 +1,14 @@
-const CACHE = "todoapp-v1";
+const CACHE = "muse-v1";
 const ASSETS = [
   "./",
   "./index.html",
   "./manifest.json",
+  "./js/db.js",
+  "./js/tools.js",
+  "./js/agent.js",
+  "./js/app.js",
+  "./legacy/",
+  "./legacy/index.html",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-512-maskable.png",
