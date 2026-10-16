@@ -1,10 +1,10 @@
 // app.js —— UI 引导（v4: M1 真 Agent 集成）
-import { open, kvGet, kvSet } from "./db.js?v=5";
-import * as T from "./tools.js?v=5";
-import { PROVIDERS, DEFAULT_SETTINGS, loadSettings, saveSettings, listModels } from "./providers.js?v=5";
-import { handle, hooks } from "./agent.js?v=5";
-import { getUsageStats } from "./usage.js?v=5";
-import { maybeExtractMemories } from "./memoryExtractor.js?v=5";
+import { open, kvGet, kvSet } from "./db.js?v=6";
+import * as T from "./tools.js?v=6";
+import { PROVIDERS, DEFAULT_SETTINGS, loadSettings, saveSettings, listModels } from "./providers.js?v=6";
+import { handle, hooks } from "./agent.js?v=6";
+import { getUsageStats } from "./usage.js?v=6";
+import { maybeExtractMemories } from "./memoryExtractor.js?v=6";
 
 const $ = id => document.getElementById(id);
 let state = { sessionId: null, sessions: [], busy: false, currentAbort: null, lastActions: [] };
@@ -84,23 +84,50 @@ function actionNode(action) {
   d.innerHTML = `<div class="ac-row"><span>${label}</span><span class="ac-sum"></span></div>`;
   const sum = d.querySelector(".ac-sum");
   if (result.summary) sum.textContent = " " + result.summary;
-  // ics / maps：提供下载/打开链接
+  // ics / maps：提供"系统级"集成按钮
   if (result.action === "ics") {
-    const a = document.createElement("a");
-    a.href = result.data.dataUrl;
-    a.download = result.data.filename;
-    a.textContent = "下载 .ics 并加入日历";
-    a.className = "ac-link";
-    d.appendChild(a);
+    // iOS Safari 17+ / 桌面 Chrome 支持 navigator.share 文件
+    // iOS 系统分享面板里直接出现"添加到日历/提醒事项/保存到文件"
+    const btn = document.createElement("button");
+    btn.className = "ac-undo";
+    btn.textContent = "📲 添加到系统日历";
+    btn.onclick = async () => {
+      const file = T.createICSFile(result.data.text, result.data.filename);
+      const nav = navigator;
+      if (nav.canShare && nav.canShare({ files: [file] })) {
+        try {
+          await nav.share({ files: [file], title: '添加到日历', text: result.data.filename.replace('.ics', '') });
+          btn.textContent = "✓ 已触发系统分享";
+        } catch (e) {
+          if (e.name === "AbortError") return;
+          btn.textContent = "分享失败：" + (e.message || e);
+        }
+      } else {
+        // 不支持：降级到下载
+        const a = document.createElement("a");
+        a.href = result.data.dataUrl; a.download = result.data.filename; a.click();
+        btn.textContent = "已下载 .ics（手动添加到日历）";
+      }
+    };
+    d.appendChild(btn);
+    // 附小字说明
+    const hint = document.createElement("div");
+    hint.className = "ac-hint";
+    hint.textContent = "iPhone：弹出系统分享面板 → 选「日历/提醒事项」即可一键导入";
+    d.appendChild(hint);
   }
   if (result.action === "maps") {
+    // maps:// 是 iOS 通用协议，OS 会拦截后拉起原生 Apple Maps App
     const a = document.createElement("a");
     a.href = result.data.url;
-    a.target = "_blank";
-    a.rel = "noopener";
-    a.textContent = "在 Apple Maps 中打开";
-    a.className = "ac-link";
+    a.className = "ac-undo";
+    a.style.textDecoration = "none";
+    a.textContent = "📍 在 Apple Maps 中打开";
     d.appendChild(a);
+    const hint = document.createElement("div");
+    hint.className = "ac-hint";
+    hint.textContent = "iPhone 会直接拉起原生地图 App";
+    d.appendChild(hint);
   }
   // 撤销按钮
   if (result.data && result.data._undo) {
@@ -188,9 +215,20 @@ async function send() {
     // 收集 actions 到消息中以便后续重渲染
     await T.addMessage(state.sessionId, "assistant", r.text || "", { actions: state.lastActions });
   } catch (e) {
-    streamBubble.textContent = "调用失败：" + (e.message || e);
+    const errText = "调用失败：" + (e.message || e);
+    streamBubble.textContent = errText;
     streamBubble.classList.remove("streaming");
-    await T.addMessage(state.sessionId, "assistant", "调用失败：" + (e.message || e));
+    streamBubble.classList.add("error");
+    const retryBtn = document.createElement("button");
+    retryBtn.className = "ac-undo";
+    retryBtn.textContent = "↻ 重新发送";
+    retryBtn.onclick = () => {
+      $("input").value = text;
+      retryBtn.disabled = true;
+      send();
+    };
+    actionContainer.appendChild(retryBtn);
+    await T.addMessage(state.sessionId, "assistant", errText);
   } finally {
     state.currentAbort = null;
     state.busy = false;

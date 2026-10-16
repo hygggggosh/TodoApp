@@ -1,5 +1,5 @@
 // tools.js —— 领域操作 + function schema 定义（规则 Agent + LLM Agent 共用）
-import { open, uid, nowISO, get, getAll, put, del, clear } from "./db.js?v=5";
+import { open, uid, nowISO, get, getAll, put, del, clear } from "./db.js?v=6";
 
 /* ---------- 任务 ---------- */
 export async function listTasks({ includeDone = true } = {}) {
@@ -177,9 +177,16 @@ export function buildICS({ title, start, durationMin = 30, note = "" }) {
   return { dataUrl: "data:text/calendar;base64," + b64, filename: title.replace(/[^\w\u4e00-\u9fa5-]+/g, "_") + ".ics", text };
 }
 
-/* 构造 Apple Maps 深链（不传具体坐标时仅做地址搜索） */
+/* 构造 iOS 原生地图深链：maps:// 协议被 iOS 拦截后直接拉起 Maps App */
 export function buildMapsLink(query) {
-  return "https://maps.apple.com/?q=" + encodeURIComponent(query) + "&near=Current+Location";
+  // iOS: maps:// 由系统拦截 → 拉起原生 Apple Maps App
+  // 桌面/非 iOS 浏览器：maps:// 解析失败但失败是静默的，不影响其他操作
+  return "maps://?q=" + encodeURIComponent(query) + "&near=Current+Location";
+}
+
+/* 把 .ics 文本包装为 File 对象（用于 Web Share API 分享到系统日历/提醒事项） */
+export function createICSFile(text, filename) {
+  return new File([text], filename, { type: "text/calendar" });
 }
 
 /* 撤销执行器 */

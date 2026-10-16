@@ -1,5 +1,5 @@
 // usage.js —— 用量统计：每次 LLM 调用的 tokens + 耗时，按模型聚合
-import { open, getAll, put, del } from "./db.js?v=5";
+import { open, getAll, put, del } from "./db.js?v=6";
 
 const STORE = "usage";
 

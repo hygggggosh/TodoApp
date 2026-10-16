@@ -88,6 +88,7 @@ footer {
 .ac-link { display:inline-block; margin-top:6px; color:var(--accent); font-size:13px; text-decoration:none; }
 .ac-undo { margin-top:6px; background:none; border:0.5px solid var(--sep); color:var(--danger); font-size:12.5px; padding:4px 10px; border-radius:10px; cursor:pointer; }
 .ac-undo:disabled { opacity:.5 }
+.ac-hint { font-size:11.5px; color:var(--text2); margin-top:5px; line-height:1.4 }
 
 #backdrop { position:fixed; inset:0; background:rgba(0,0,0,.4); opacity:0; pointer-events:none; transition:.25s; z-index:30; }
 #backdrop.open { opacity:1; pointer-events:auto; }
@@ -274,9 +275,9 @@ li.current .ttitle { color:var(--accent);font-weight:600 }
   </div>
 </aside>
 
-<script type="module" src="./js/app.js?v=5"></script>
+<script type="module" src="./js/app.js?v=6"></script>
 <script>
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=5").catch(() => {});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=6").catch(() => {});
 </script>
 </body>
 </html>

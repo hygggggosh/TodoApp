@@ -1,7 +1,7 @@
 // agent.js —— 模式分发：LLM（有 Key）→ 规则（无 Key/失败时降级）
-import * as T from "./tools.js?v=5";
-import { loadSettings } from "./providers.js?v=5";
-import { llmHandle } from "./llmAgent.js?v=5";
+import * as T from "./tools.js?v=6";
+import { loadSettings } from "./providers.js?v=6";
+import { llmHandle } from "./llmAgent.js?v=6";
 
 const MODE_NOTE = "（离线规则模式 · 配置 AI 后按原话说一遍即可获得更聪明的回答）";
 

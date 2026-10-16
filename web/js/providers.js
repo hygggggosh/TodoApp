@@ -1,5 +1,5 @@
 // providers.js —— 供应商预设 + 通用 OpenAI 兼容 fetcher（含 SSE 流式解析 + 错误归因）
-import { kvGet, kvSet } from "./db.js?v=5";
+import { kvGet, kvSet } from "./db.js?v=6";
 
 export const PROVIDERS = {
   deepseek: {
@@ -127,8 +127,28 @@ export async function listModels({ baseUrl, apiKey, providerId }) {
    onDone({usage, fullText}): 结束回调（usage 可能为 null）
    onError(msg): 错误回调
    返回 Promise<{fullText, toolCalls, usage}>
-   toolCalls 累积为 [{id, name, argsJson}]  */
-export async function streamChat({
+   toolCalls 累积为 [{id, name, argsJson}]
+   错误若是网络/CORS 抖动会自动重试 1 次（1.5s 后），鉴权/限流不重试。 */
+export async function streamChat(params) {
+  let lastErr;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      return await streamChatOnce(params);
+    } catch (e) {
+      lastErr = e;
+      const msg = (e && e.message) || String(e);
+      const retryable = /网络\/浏览器|网络|CORS|fetch|Failed to fetch|abort|timeout/i.test(msg);
+      if (retryable && attempt < 2) {
+        await new Promise(r => setTimeout(r, 1500));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr;
+}
+
+async function streamChatOnce({
   baseUrl, apiKey, model, messages, tools, temperature, maxTokens, reasoningEffort, providerId,
   signal
 }) {
@@ -141,26 +161,22 @@ export async function streamChat({
     temperature,
     max_tokens: maxTokens
   };
-  // 工具
   if (tools && tools.length) body.tools = tools;
-  // 推理参数
   if (providerId === "qwen" && reasoningEffort === "deep") body.enable_thinking = true;
-  if (providerId === "glm" && reasoningEffort === "deep") {
-    body.thinking = { type: "enabled" };
-  }
-  // deepseek 切 model 已经在 model 字段上
+  if (providerId === "glm" && reasoningEffort === "deep") body.thinking = { type: "enabled" };
 
   let res;
-  try { res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: "Bearer " + apiKey
-    },
-    body: JSON.stringify(body),
-    signal
-  }); }
-  catch (e) { throw new Error(classifyError(e)); }
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + apiKey
+      },
+      body: JSON.stringify(body),
+      signal
+    });
+  } catch (e) { throw new Error(classifyError(e)); }
   if (!res.ok) {
     let errBody = null;
     try { errBody = await res.json(); } catch {}
@@ -170,7 +186,7 @@ export async function streamChat({
   const dec = new TextDecoder("utf-8");
   let buf = "";
   let fullText = "";
-  const toolCallsMap = new Map();   // index -> {id, name, argsBuf}
+  const toolCallsMap = new Map();
   let usage = null;
   let finishReason = null;
   while (true) {
