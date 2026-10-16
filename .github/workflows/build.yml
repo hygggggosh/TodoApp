@@ -1,0 +1,44 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build for iOS Simulator
+    runs-on: macos-15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build (iOS Simulator)
+        run: |
+          set -o pipefail
+          xcodebuild -project TodoApp.xcodeproj \
+            -scheme TodoApp \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build \
+            build 2>&1 | tail -120
+
+      - name: Verify app bundle exists
+        run: test -d build/Build/Products/Debug-iphonesimulator/TodoApp.app && echo "App bundle OK"
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TodoApp-Debug
+          path: build/Build/Products/Debug-iphonesimulator/TodoApp.app
+          if-no-files-found: error

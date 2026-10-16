@@ -1,0 +1,23 @@
+name: TodoApp
+options:
+  bundleIdPrefix: com.demo
+  createIntermediateGroups: true
+  deploymentTarget:
+    iOS: "16.0"
+targets:
+  TodoApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: TodoApp
+    info:
+      path: TodoApp/Info.plist
+      properties:
+        CFBundleDisplayName: 我的清单
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        SWIFT_VERSION: "5.9"
+        TARGETED_DEVICE_FAMILY: "1"
