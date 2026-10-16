@@ -1,6 +1,6 @@
 // agent.js —— M0 规则引擎版 Agent：无 Key 也全能操作任务/记忆/记录
 // M1 会替换为 LLM function-calling 循环，但底层工具（tools.js）完全复用
-import * as T from "./tools.js";
+import * as T from "./tools.js?v=3";
 
 const MODE_NOTE = "（离线规则模式 · 配置 AI 后按原话说一遍即可获得更聪明的回答）";
 

@@ -1,7 +1,7 @@
 // app.js —— UI 引导：渲染、会话、侧滑面板、旧数据迁移
-import { open, kvGet, kvSet } from "./db.js";
-import * as T from "./tools.js";
-import { handle, hooks } from "./agent.js";
+import { open, kvGet, kvSet } from "./db.js?v=3";
+import * as T from "./tools.js?v=3";
+import { handle, hooks } from "./agent.js?v=3";
 
 const $ = id => document.getElementById(id);
 let state = { sessionId: null, sessions: [], busy: false };

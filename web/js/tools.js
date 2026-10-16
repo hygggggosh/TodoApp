@@ -1,5 +1,5 @@
 // tools.js —— 领域操作：M0 规则 Agent 与 M1 LLM function-calling 共用
-import { open, uid, nowISO, get, getAll, put, del, clear } from "./db.js";
+import { open, uid, nowISO, get, getAll, put, del, clear } from "./db.js?v=3";
 
 /* ---------- 任务 ---------- */
 export async function listTasks({ includeDone = true } = {}) {
