@@ -1,6 +1,7 @@
-// agent.js —— M0 规则引擎版 Agent：无 Key 也全能操作任务/记忆/记录
-// M1 会替换为 LLM function-calling 循环，但底层工具（tools.js）完全复用
-import * as T from "./tools.js?v=3";
+// agent.js —— 模式分发：LLM（有 Key）→ 规则（无 Key/失败时降级）
+import * as T from "./tools.js?v=4";
+import { loadSettings } from "./providers.js?v=4";
+import { llmHandle } from "./llmAgent.js?v=4";
 
 const MODE_NOTE = "（离线规则模式 · 配置 AI 后按原话说一遍即可获得更聪明的回答）";
 
@@ -10,14 +11,12 @@ function fmtTasks(rows) {
     `${i + 1}. ${t.done ? "✅" : "⬜️"} ${t.title}${t.due ? "（截⽌：" + t.due.slice(0, 10) + "）" : ""}${t.note ? " — " + t.note : ""}`
   ).join("\n");
 }
-
 function fmtDate(d) {
   return d.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
 }
 
 export const hooks = { export: null, open: null };
 
-/* 意图规则表：按顺序首个匹配执行 */
 const rules = [
   {
     name: "time",
@@ -131,7 +130,7 @@ const rules = [
   {
     name: "open.ui",
     match: /^(打开|显示)(任务面板|记忆库|设置)/,
-    run: async (m, ctx) => {
+    run: async (m) => {
       const map = { 任务面板: "tasks", 记忆库: "memories", 设置: "settings" };
       const target = Object.keys(map).find(k => m[0].includes(k));
       hooks.open && hooks.open(map[target]);
@@ -145,7 +144,13 @@ const FALLBACK = [
   "这条我还不太会按规则处理。" + MODE_NOTE
 ];
 
-export async function handle(text) {
+export async function detectMode() {
+  const s = await loadSettings();
+  return s.apiKey ? "llm" : "rule";
+}
+
+/* 规则模式：纯本地规则 */
+export async function ruleHandle(text) {
   const clean = text.trim();
   if (!clean) return null;
   for (const rule of rules) {
@@ -153,4 +158,18 @@ export async function handle(text) {
     if (m) return rule.run(m);
   }
   return FALLBACK[clean.length % FALLBACK.length];
+}
+
+/* 主入口：app.js 调用，传入历史与回调 */
+export async function handle({ text, sessionId, history, onDelta, onTool, onAction, signal }) {
+  const mode = await detectMode();
+  if (mode === "llm") {
+    const r = await llmHandle({ sessionId, history, onDelta, onTool, onAction, signal });
+    if (r.ok) return { mode: "llm", text: r.text, actions: r.actions, tokens: r.tokens };
+    // 失败降级到规则
+    const fallback = await ruleHandle(text);
+    return { mode: "rule", text: (r.error ? `（AI 失败：${r.error}）\n\n` : "") + (fallback || ""), actions: [], tokens: null };
+  }
+  const fallback = await ruleHandle(text);
+  return { mode: "rule", text: fallback || "", actions: [], tokens: null };
 }

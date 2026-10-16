@@ -16,21 +16,19 @@
 <style>
 :root {
   --accent: #194ff4;
-  --bg: #f2f2f7;
-  --card: #ffffff;
-  --text: #1c1c1e;
-  --text2: #8e8e93;
-  --danger: #ff3b30;
+  --accent-2: #2b64ff;
+  --bg: #f2f2f7; --card: #ffffff; --text: #1c1c1e; --text2: #8e8e93;
+  --danger: #ff3b30; --success: #34c759;
   --sep: rgba(60,60,67,.12);
   --bubble-user: linear-gradient(180deg,#2b64ff,#1546e8);
 }
 @media (prefers-color-scheme: dark) {
-  :root { --bg: #000; --card: #1c1c1e; --text: #fff; --sep: rgba(84,84,88,.65); }
+  :root { --bg:#000; --card:#1c1c1e; --text:#fff; --sep:rgba(84,84,88,.65); }
 }
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 html,body { height:100%; }
 body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif; background:var(--bg); color:var(--text); }
-button { font-family:inherit; }
+button,input,select,textarea { font-family:inherit; }
 
 #app { max-width:560px; margin:0 auto; height:100dvh; display:flex; flex-direction:column; }
 header {
@@ -53,8 +51,8 @@ header .title { flex:1; font-weight:700; font-size:17px; padding-left:4px; white
 }
 .msg.user { margin-left:auto; background:var(--bubble-user); color:#fff; border-bottom-right-radius:6px; }
 .msg.assistant { background:var(--card); border-bottom-left-radius:6px; box-shadow:0 1px 2px rgba(0,0,0,.05); }
-.msg.typing { width:44px; text-align:center; letter-spacing:4px; color:var(--text2); animation:blink 1.2s infinite; }
-@keyframes blink { 50% { opacity:.35 } }
+.msg.streaming::after { content:"▍"; opacity:.4; margin-left:2px; animation:blink 1s infinite; }
+@keyframes blink { 50% { opacity:.15 } }
 @keyframes pop { from { transform:scale(.96); opacity:0 } to { transform:scale(1); opacity:1 } }
 .hint { text-align:center; color:var(--text2); font-size:13.5px; line-height:1.7; padding-top:26vh; white-space:pre-wrap; }
 
@@ -67,7 +65,7 @@ footer {
   flex:1; min-height:40px; max-height:120px; resize:none;
   border-radius:20px; border:0.5px solid var(--sep);
   background:var(--card); color:var(--text);
-  padding:9px 14px; font-size:16px; font-family:inherit; line-height:1.4;
+  padding:9px 14px; font-size:16px; line-height:1.4;
 }
 #input:focus { outline:none; border-color:var(--accent); }
 #sendBtn {
@@ -76,6 +74,21 @@ footer {
 }
 #sendBtn:disabled { opacity:.35 }
 
+/* 动作卡片 */
+.action-list { display:flex; flex-direction:column; gap:6px; margin: -4px 0 10px 0; max-width:82%; }
+.action-card {
+  background:var(--card); border-radius:14px; padding:10px 12px; font-size:14px;
+  border-left:3px solid var(--success);
+  box-shadow:0 1px 2px rgba(0,0,0,.05);
+  animation:pop .2s ease-out;
+}
+.ac-row { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.ac-row span:first-child { font-weight:600; color:var(--success); }
+.ac-sum { color:var(--text2); font-size:13px; flex:1; text-align:right; }
+.ac-link { display:inline-block; margin-top:6px; color:var(--accent); font-size:13px; text-decoration:none; }
+.ac-undo { margin-top:6px; background:none; border:0.5px solid var(--sep); color:var(--danger); font-size:12.5px; padding:4px 10px; border-radius:10px; cursor:pointer; }
+.ac-undo:disabled { opacity:.5 }
+
 #backdrop { position:fixed; inset:0; background:rgba(0,0,0,.4); opacity:0; pointer-events:none; transition:.25s; z-index:30; }
 #backdrop.open { opacity:1; pointer-events:auto; }
 .sheet {
@@ -83,7 +96,7 @@ footer {
   transform:translateY(105%); transition:transform .3s cubic-bezier(.32,.72,.3,1);
   display:flex; flex-direction:column;
 }
-.sheet.right { right:0; top:0; bottom:0; width:min(88vw,360px); border-radius:0; transform:translateX(105%); }
+.sheet.right { right:0; top:0; bottom:0; width:min(92vw,400px); border-radius:0; transform:translateX(105%); }
 .sheet.open { transform:translate(0) !important; }
 .sheet-head {
   padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;
@@ -92,18 +105,17 @@ footer {
 }
 .sheet-head strong { font-size:17px; }
 .sheet-body { flex:1; overflow-y:auto; padding:14px 16px calc(env(safe-area-inset-bottom) + 20px); }
+
+.card { background:var(--card); border-radius:12px; padding:12px 14px; margin-bottom:10px; font-size:14px; line-height:1.5; }
+.card.mode-llm { border-left:3px solid var(--accent); }
+.card.mode-rule { border-left:3px solid var(--text2); }
+
 .sheet ul { list-style:none; background:var(--card); border-radius:12px; overflow:hidden; }
-.sheet li {
-  display:flex; align-items:center; gap:12px; padding:12px 14px;
-  border-bottom:0.5px solid var(--sep);
-}
+.sheet li { display:flex; align-items:center; gap:12px; padding:12px 14px; border-bottom:0.5px solid var(--sep); }
 .sheet li:last-child { border-bottom:none }
 .mini { border:none;background:none;color:var(--text2);font-size:15px;cursor:pointer;padding:6px }
 .mini.danger { color:var(--danger) }
-.circle {
-  width:24px;height:24px;border-radius:50%;border:2px solid var(--text2);
-  background:none;color:transparent;font-size:12px;flex-shrink:0;cursor:pointer;
-}
+.circle { width:24px;height:24px;border-radius:50%;border:2px solid var(--text2);background:none;color:transparent;font-size:12px;flex-shrink:0;cursor:pointer; }
 .circle.done { background:var(--accent);border-color:var(--accent);color:#fff }
 .tinfo { flex:1;min-width:0;cursor:pointer }
 .ttitle { font-size:15.5px;word-break:break-word }
@@ -111,25 +123,40 @@ footer {
 .tnote { font-size:12px;color:var(--text2);margin-top:2px }
 .emptyhint { color:var(--text2);font-size:13px;justify-content:center }
 .addrow { display:flex;gap:8px;margin-bottom:12px }
-.addrow input {
-  flex:1;border:none;border-radius:10px;background:var(--card);color:var(--text);
-  padding:10px 12px;font-size:15px;font-family:inherit;
-}
+.addrow input { flex:1;border:none;border-radius:10px;background:var(--card);color:var(--text);padding:10px 12px;font-size:15px; }
 .addrow input:focus{outline:2px solid var(--accent)}
-.card { background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px;font-size:14px;line-height:1.6 }
-.card .dim { color:var(--text2);font-size:12.5px }
+
+/* 设置面板表单 */
+.field { margin-bottom:10px; }
+.field label { display:block; font-size:12px; color:var(--text2); margin-bottom:4px; }
+.field input, .field select {
+  width:100%; border:none; border-radius:10px; background:var(--card); color:var(--text);
+  padding:9px 12px; font-size:15px;
+}
+.field input:focus, .field select:focus { outline:2px solid var(--accent); }
+.field input[type=range] { padding:0; background:none; }
+.field-row { display:flex; gap:8px; }
+.field-row > * { flex:1 }
+.key-row { display:flex; gap:6px }
+.key-row input { flex:1; }
 .btn {
-  width:100%;border:none;border-radius:10px;padding:11px 0;font-size:15px;
-  background:var(--card);color:var(--text);cursor:pointer;margin-bottom:8px;
+  width:100%; border:none; border-radius:10px; padding:11px 0; font-size:15px;
+  background:var(--card); color:var(--text); cursor:pointer; margin-bottom:6px;
 }
-.btn.primary { background:var(--accent);color:#fff }
+.btn.primary { background:var(--accent); color:#fff }
 .btn.danger { color:var(--danger) }
-.badge {
-  display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;
-  background:rgba(25,79,244,.12);color:var(--accent);margin-left:6px;
-}
+.btn.small { padding:7px 12px; font-size:13px; width:auto; flex:1 }
+.hint-text { font-size:12.5px; color:var(--text2); margin-top:4px; }
+.detect-bar { display:flex; gap:8px; margin:6px 0 8px; }
+.detect-bar button { width:auto; padding:8px 12px; font-size:13.5px; border-radius:10px; border:none; background:var(--accent); color:#fff; cursor:pointer; }
+details { background:var(--card); border-radius:10px; padding:8px 12px; margin-bottom:10px; }
+details summary { cursor:pointer; font-size:14px; color:var(--accent); }
+details[open] { padding-bottom:12px; }
+.toggle { display:flex; justify-content:space-between; align-items:center; padding:4px 0; }
+.toggle span { font-size:14px; }
+.toggle input[type=checkbox] { width:18px; height:18px; accent-color:var(--accent); }
+
 li.current .ttitle { color:var(--accent);font-weight:600 }
-li.current::before { content:"› ";color:var(--accent) }
 </style>
 </head>
 <body>
@@ -141,9 +168,7 @@ li.current::before { content:"› ";color:var(--accent) }
     <button class="iconbtn" id="btnMemories" title="记忆库">🧠</button>
     <button class="iconbtn" id="btnSettings" title="设置">⚙️</button>
   </header>
-
   <main id="flow"></main>
-
   <footer>
     <textarea id="input" rows="1" placeholder="对助手说点什么…"></textarea>
     <button id="sendBtn" aria-label="发送">↑</button>
@@ -180,24 +205,78 @@ li.current::before { content:"› ";color:var(--accent) }
   <div class="sheet-head"><strong>设置</strong><button class="mini" data-close>完成</button></div>
   <div class="sheet-body">
     <div class="card" id="modeBanner">…</div>
+
+    <div class="card">
+      <strong>模型接入</strong>
+      <div class="hint-text" style="margin:4px 0 10px">填入 API Key 后点击「检测」验证连通并列出可用模型。Key 仅存本机。</div>
+      <div class="field">
+        <label>供应商</label>
+        <select id="providerSel">
+          <option value="deepseek">DeepSeek</option>
+          <option value="glm">智谱 GLM</option>
+          <option value="kimi">Kimi 月之暗面</option>
+          <option value="qwen">通义 Qwen</option>
+          <option value="custom">自定义 OpenAI 兼容</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>API Key</label>
+        <div class="key-row">
+          <input type="password" id="apiKey" placeholder="sk-..." autocomplete="off">
+          <button class="btn small" id="toggleKeyBtn">显示</button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Base URL</label>
+        <input type="text" id="baseUrl" placeholder="https://...">
+      </div>
+      <div class="field">
+        <label>模型</label>
+        <select id="modelSel"></select>
+      </div>
+      <div class="detect-bar">
+        <button id="detectBtn">检测可用模型</button>
+        <span class="hint-text" id="detectHint" style="flex:1;align-self:center"></span>
+      </div>
+      <button class="btn primary" id="saveSettingsBtn">💾 保存设置</button>
+    </div>
+
+    <details>
+      <summary>高级参数</summary>
+      <div class="field"><label>推理等级</label>
+        <select id="reasoningSel"><option value="normal">普通</option><option value="deep">深度</option></select>
+      </div>
+      <div class="field"><label>上下文预算（tokens）</label>
+        <input type="number" id="ctxBudget" min="2000" max="128000" step="1000" value="8000">
+      </div>
+      <div class="field"><label>温度</label>
+        <input type="number" id="temperature" min="0" max="2" step="0.1" value="0.7">
+      </div>
+      <div class="field"><label>最大回复 tokens</label>
+        <input type="number" id="maxTokens" min="200" max="8000" step="100" value="2048">
+      </div>
+      <div class="toggle"><span>对话后自动提取长期记忆</span><input type="checkbox" id="autoMemory" checked></div>
+    </details>
+
     <div class="card">
       <strong>数据</strong>
-      <div class="dim" style="margin:4px 0 10px">一切数据仅存在本机浏览器，导出即带走。</div>
+      <div class="hint-text" style="margin:4px 0 10px">一切数据仅存在本机浏览器。</div>
       <button class="btn" id="exportBtn">⬇︎ 导出全部数据（JSON）</button>
       <label class="btn" style="display:block;text-align:center">⬆︎ 从备份导入
         <input type="file" id="importFile" accept="application/json" style="display:none">
       </label>
       <button class="btn danger" id="wipeBtn">清空全部数据</button>
     </div>
-    <div class="card dim">
-      Muse PWA · M0 · 数据版本 v1<br>旧版「清单」归档：<a href="./legacy/">/legacy/</a>
+
+    <div class="card dim" style="font-size:12.5px">
+      Muse PWA · <b>M1</b> · 数据版本 v2<br>旧版「清单」归档：<a href="./legacy/">/legacy/</a>
     </div>
   </div>
 </aside>
 
-<script type="module" src="./js/app.js?v=3"></script>
+<script type="module" src="./js/app.js?v=4"></script>
 <script>
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=3").catch(() => {});
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js?v=4").catch(() => {});
 </script>
 </body>
 </html>

@@ -1,10 +1,13 @@
-// app.js —— UI 引导：渲染、会话、侧滑面板、旧数据迁移
-import { open, kvGet, kvSet } from "./db.js?v=3";
-import * as T from "./tools.js?v=3";
-import { handle, hooks } from "./agent.js?v=3";
+// app.js —— UI 引导（v4: M1 真 Agent 集成）
+import { open, kvGet, kvSet } from "./db.js?v=4";
+import * as T from "./tools.js?v=4";
+import { PROVIDERS, DEFAULT_SETTINGS, loadSettings, saveSettings, listModels } from "./providers.js?v=4";
+import { handle, hooks } from "./agent.js?v=4";
+import { getUsageStats } from "./usage.js?v=4";
+import { maybeExtractMemories } from "./memoryExtractor.js?v=4";
 
 const $ = id => document.getElementById(id);
-let state = { sessionId: null, sessions: [], busy: false };
+let state = { sessionId: null, sessions: [], busy: false, currentAbort: null, lastActions: [] };
 
 /* ---------- 迁移旧清单数据 ---------- */
 async function migrateLegacy() {
@@ -28,7 +31,7 @@ async function migrateLegacy() {
           `检测到旧版「清单」数据，已安全迁移 ${n} 条任务到新助手。旧页面归档在 /legacy/，随时可取。`);
       }
     }
-  } catch { /* 忽略迁移失败，不影响主流程 */ }
+  } catch {}
   await kvSet("migratedTodoV1", true);
 }
 
@@ -54,57 +57,146 @@ async function newSession() {
 }
 
 /* ---------- 消息渲染 ---------- */
-function bubble(m) {
-  if (m.role === "user") return div("msg user", esc(m.content));
-  return div("msg assistant", esc(m.content));
-}
-function div(cls, html) {
-  const d = document.createElement("div");
-  d.className = cls; d.innerHTML = html;
-  return d;
-}
 function esc(s) {
   return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+function msgNode(m) {
+  const d = document.createElement("div");
+  d.className = "msg " + m.role;
+  d.innerText = m.content;
+  return d;
+}
+function actionNode(action) {
+  // 动作卡片：显示操作 + 撤销按钮（如果有 undo）
+  const d = document.createElement("div");
+  d.className = "action-card";
+  const { tool, result } = action;
+  const labelMap = {
+    create_task: "✓ 新建任务",
+    toggle_task: "✓ 切换完成",
+    delete_task: "✗ 删除任务",
+    create_entry: "✓ 新建记录",
+    create_memory: "✓ 写入记忆",
+    ics: "📅 日历邀请",
+    maps: "📍 地图"
+  };
+  const label = labelMap[result.action] || ("✓ " + tool);
+  d.innerHTML = `<div class="ac-row"><span>${label}</span><span class="ac-sum"></span></div>`;
+  const sum = d.querySelector(".ac-sum");
+  if (result.summary) sum.textContent = " " + result.summary;
+  // ics / maps：提供下载/打开链接
+  if (result.action === "ics") {
+    const a = document.createElement("a");
+    a.href = result.data.dataUrl;
+    a.download = result.data.filename;
+    a.textContent = "下载 .ics 并加入日历";
+    a.className = "ac-link";
+    d.appendChild(a);
+  }
+  if (result.action === "maps") {
+    const a = document.createElement("a");
+    a.href = result.data.url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.textContent = "在 Apple Maps 中打开";
+    a.className = "ac-link";
+    d.appendChild(a);
+  }
+  // 撤销按钮
+  if (result.data && result.data._undo) {
+    const undo = result.data._undo;
+    const btn = document.createElement("button");
+    btn.className = "ac-undo";
+    btn.textContent = "撤销";
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const ok = await T.runUndo(undo);
+      btn.textContent = ok ? "已撤销" : "已不存在";
+      setTimeout(() => d.remove(), 1200);
+    };
+    d.appendChild(btn);
+  }
+  return d;
 }
 async function renderChat() {
   const msgs = await T.listMessages(state.sessionId);
   const flow = $("flow");
   flow.innerHTML = "";
   if (!msgs.length) {
-    flow.appendChild(div("hint",
-      "👋 我是你的个人助手。试试：\n「添加任务：周五提交报告」 · 「记住：我对海鲜过敏」\n「简报」 · 「还有什么待办」 · 「现在几点」"));
+    const h = document.createElement("div");
+    h.className = "hint";
+    h.textContent = "👋 我是你的个人助手。试试：「添加任务：周五提交报告」 · 「记住：我对海鲜过敏」\n「简报」 · 「还有什么待办」 · 「现在几点」";
+    flow.appendChild(h);
   }
-  for (const m of msgs) flow.appendChild(bubble(m));
+  for (const m of msgs) {
+    flow.appendChild(msgNode(m));
+    if (m.actions && m.actions.length) {
+      for (const a of m.actions) flow.appendChild(actionNode(a));
+    }
+  }
   flow.scrollTop = flow.scrollHeight;
   const session = state.sessions.find(s => s.id === state.sessionId);
   $("sessionTitle").textContent = session ? session.title : "对话";
 }
 
-/* ---------- 发送 ---------- */
+/* ---------- 发送（含 LLM 流式）---------- */
 async function send() {
   if (state.busy) return;
   const input = $("input");
   const text = input.value.trim();
   if (!text) return;
   state.busy = true;
+  state.lastActions = [];
   input.value = "";
+
+  // 存用户消息
   await T.addMessage(state.sessionId, "user", text);
+  // 先把用户消息渲染出来
   await renderChat();
-  const typing = div("msg assistant typing", "…");
-  $("flow").appendChild(typing);
-  $("flow").scrollTop = $("flow").scrollHeight;
+
+  // 创建一个 streaming 气泡
+  const flow = $("flow");
+  const streamBubble = document.createElement("div");
+  streamBubble.className = "msg assistant streaming";
+  streamBubble.textContent = "…";
+  flow.appendChild(streamBubble);
+  flow.scrollTop = flow.scrollHeight;
+  // 创建一个动作容器
+  const actionContainer = document.createElement("div");
+  actionContainer.className = "action-list";
+  flow.appendChild(actionContainer);
+  flow.scrollTop = flow.scrollHeight;
+
+  // 取消按钮：30s 超时
+  const ac = new AbortController();
+  state.currentAbort = ac;
+  const timeout = setTimeout(() => ac.abort("timeout"), 60000);
+
+  // 取历史消息（含刚加的 user）
+  const history = await T.listMessages(state.sessionId);
+
   try {
-    let reply;
-    try {
-      reply = await handle(text, { sessionId: state.sessionId }) || "……";
-    } catch (e) {
-      reply = "内部错误：" + (e && e.message ? e.message : e);
-    }
-    await T.addMessage(state.sessionId, "assistant", reply);
+    const r = await handle({
+      text, sessionId: state.sessionId, history,
+      onDelta: (full) => { streamBubble.textContent = full; flow.scrollTop = flow.scrollHeight; },
+      onTool: (tc) => { /* 占位：可显示工具名小标签 */ },
+      onAction: (a) => { actionContainer.appendChild(actionNode(a)); flow.scrollTop = flow.scrollHeight; }
+    });
+    clearTimeout(timeout);
+    streamBubble.textContent = r.text || "（无回复）";
+    streamBubble.classList.remove("streaming");
+    // 收集 actions 到消息中以便后续重渲染
+    await T.addMessage(state.sessionId, "assistant", r.text || "", { actions: state.lastActions });
+  } catch (e) {
+    streamBubble.textContent = "调用失败：" + (e.message || e);
+    streamBubble.classList.remove("streaming");
+    await T.addMessage(state.sessionId, "assistant", "调用失败：" + (e.message || e));
   } finally {
-    typing.remove();
-    await renderChat();
+    state.currentAbort = null;
     state.busy = false;
+    await renderChat();
+    // 后台异步长期记忆提取
+    maybeExtractMemories(state.sessionId).catch(() => {});
   }
 }
 
@@ -116,6 +208,7 @@ function openSheet(name) {
   if (name === "tasks") renderTasks();
   if (name === "memories") renderMemories();
   if (name === "sessions") renderSessions();
+  if (name === "settings") renderSettings();
 }
 function closeSheets() {
   document.querySelectorAll(".sheet").forEach(s => s.classList.remove("open"));
@@ -124,14 +217,16 @@ function closeSheets() {
 
 async function renderTasks() {
   const rows = await T.listTasks();
+  $("taskCount").textContent = rows.filter(r => !r.done).length;
   const box = $("taskList");
   box.innerHTML = "";
-  $("taskCount").textContent = rows.filter(r => !r.done).length;
   rows.reverse().forEach(t => {
     const li = document.createElement("li");
     li.innerHTML = `<button class="circle ${t.done ? "done" : ""}">✓</button>
       <div class="tinfo"><div class="ttitle ${t.done ? "struck" : ""}">${esc(t.title)}</div>
-      ${t.note ? `<div class="tnote">${esc(t.note)}</div>` : ""}</div>
+      ${t.note ? `<div class="tnote">${esc(t.note)}</div>` : ""}
+      ${t.due ? `<div class="tnote">⏰ ${esc(t.due.slice(0, 16).replace("T", " "))}</div>` : ""}
+      </div>
       <button class="mini danger" data-del="${t.id}">✕</button>`;
     li.querySelector(".circle").onclick = async () => { await T.toggleTask(t.id); renderTasks(); };
     li.querySelector("[data-del]").onclick = async () => { await T.deleteTask(t.id); renderTasks(); };
@@ -145,7 +240,7 @@ async function renderMemories() {
   rows.forEach(m => {
     const li = document.createElement("li");
     li.innerHTML = `<div class="tinfo"><div class="ttitle">${esc(m.text)}</div>
-      <div class="tnote">${m.createdAt.slice(0, 10)} · ${m.source === "auto" ? "自动提取" : "手动"}</div></div>
+      <div class="tnote">${m.createdAt.slice(0, 10)} · ${m.source === "auto" ? "🤖 自动提取" : (m.source === "llm" ? "✍️ Agent 写入" : "手动")}</div></div>
       <button class="mini danger" data-del="${m.id}">✕</button>`;
     li.querySelector("[data-del]").onclick = async () => { await T.deleteMemory(m.id); renderMemories(); };
     box.appendChild(li);
@@ -160,7 +255,7 @@ async function renderSessions() {
     li.className = s.id === state.sessionId ? "current" : "";
     li.innerHTML = `<div class="tinfo"><div class="ttitle">${esc(s.title)}</div>
       <div class="tnote">${s.updatedAt.slice(0, 16).replace("T", " ")}</div></div>
-      <button class="mini danger" data-del="${s.id}" title="删除">✕</button>`;
+      <button class="mini danger" data-del="${s.id}">✕</button>`;
     li.querySelector(".tinfo").onclick = () => switchSession(s.id);
     li.querySelector("[data-del]").onclick = async (e) => {
       e.stopPropagation();
@@ -179,10 +274,107 @@ async function renderSessions() {
   }
 }
 
-/* ---------- 设置面板 ---------- */
+/* ---------- 设置面板（M1：模型接入中心 + 数据） ---------- */
 async function renderSettings() {
-  $("modeBanner").textContent = "当前模式：离线规则引擎（AI 模型接入将在 M1 版本提供）";
+  const s = await loadSettings();
+  $("providerSel").value = s.provider;
+  $("apiKey").value = s.apiKey;
+  $("baseUrl").value = s.baseUrl;
+  $("modelSel").innerHTML = `<option value="${esc(s.model)}">${esc(s.model)}</option>`;
+  $("modelSel").value = s.model;
+  $("reasoningSel").value = s.reasoningEffort;
+  $("ctxBudget").value = s.ctxBudget;
+  $("temperature").value = s.temperature;
+  $("maxTokens").value = s.maxTokens;
+  $("autoMemory").checked = s.autoMemory;
+  // 模式 banner
+  await renderModeBanner();
 }
+
+async function renderModeBanner() {
+  const s = await loadSettings();
+  const u = await getUsageStats();
+  const today = u.todayPrompt + u.todayCompletion;
+  const total = u.totalPrompt + u.totalCompletion;
+  if (s.apiKey) {
+    $("modeBanner").innerHTML = `🤖 <b>真 Agent 模式</b> · 模型 <b>${esc(s.model)}</b> · 今日 ${today.toLocaleString()} tokens · 累计 ${total.toLocaleString()} tokens`;
+    $("modeBanner").className = "card mode-llm";
+  } else {
+    $("modeBanner").innerHTML = `📝 <b>离线规则模式</b> · 无 API Key · 在下方配置模型以启用真 Agent`;
+    $("modeBanner").className = "card mode-rule";
+  }
+}
+
+async function onProviderChange() {
+  const id = $("providerSel").value;
+  const p = PROVIDERS[id];
+  if (!p) return;
+  // 自动填 baseUrl
+  if (id !== "custom") $("baseUrl").value = p.baseUrl;
+  else $("baseUrl").value = "";
+  // 填模型下拉（先填预设）
+  const sel = $("modelSel");
+  sel.innerHTML = "";
+  if (p.models.length) {
+    for (const m of p.models) {
+      const opt = document.createElement("option");
+      opt.value = m.id; opt.textContent = m.label;
+      sel.appendChild(opt);
+    }
+  } else {
+    sel.innerHTML = '<option value="">请填入模型名</option>';
+  }
+  // 加载已保存
+  const s = await loadSettings();
+  if (p.models.some(m => m.id === s.model)) sel.value = s.model;
+  else if (p.models.length) sel.value = p.defaultModel;
+}
+
+async function onDetectModels() {
+  const id = $("providerSel").value;
+  const apiKey = $("apiKey").value.trim();
+  const baseUrl = $("baseUrl").value.trim() || PROVIDERS[id]?.baseUrl;
+  if (!apiKey) return alert("请先填 API Key");
+  $("detectBtn").textContent = "检测中…";
+  $("detectBtn").disabled = true;
+  try {
+    const ids = await listModels({ baseUrl, apiKey, providerId: id });
+    const sel = $("modelSel");
+    const cur = sel.value;
+    sel.innerHTML = "";
+    for (const mid of ids) {
+      const opt = document.createElement("option");
+      opt.value = mid; opt.textContent = mid;
+      sel.appendChild(opt);
+    }
+    if (ids.includes(cur)) sel.value = cur;
+    $("detectHint").textContent = "✅ 找到 " + ids.length + " 个模型";
+  } catch (e) {
+    $("detectHint").textContent = "❌ " + e.message;
+  } finally {
+    $("detectBtn").textContent = "检测可用模型";
+    $("detectBtn").disabled = false;
+  }
+}
+
+async function onSaveSettings() {
+  const s = {
+    provider: $("providerSel").value,
+    apiKey: $("apiKey").value.trim(),
+    baseUrl: $("baseUrl").value.trim(),
+    model: $("modelSel").value.trim() || $("modelSel").options[0]?.value || "",
+    reasoningEffort: $("reasoningSel").value,
+    ctxBudget: parseInt($("ctxBudget").value) || 8000,
+    temperature: parseFloat($("temperature").value) || 0.7,
+    maxTokens: parseInt($("maxTokens").value) || 2048,
+    autoMemory: $("autoMemory").checked
+  };
+  await saveSettings(s);
+  $("saveSettingsBtn").textContent = "✓ 已保存";
+  await renderModeBanner();
+  setTimeout(() => $("saveSettingsBtn").textContent = "💾 保存设置", 1500);
+}
+
 async function doExport() {
   const data = await T.exportAll();
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
@@ -230,15 +422,22 @@ function bind() {
   $("exportBtn").onclick = doExport;
   $("importFile").addEventListener("change", e => { if (e.target.files[0]) doImport(e.target.files[0]); });
   $("wipeBtn").onclick = async () => {
-    if (!confirm("确定清空全部数据（任务/记忆/记录/会话）？此操作不可恢复！")) return;
+    if (!confirm("确定清空全部数据？此操作不可恢复！")) return;
     await T.wipeAll();
-    // 清空后重建默认会话与标记
     localStorage.removeItem("todoapp.tasks");
     await kvSet("migratedTodoV1", true);
     state.sessionId = null;
     await ensureSession();
     await renderChat();
     closeSheets();
+  };
+  // M1 新增
+  $("providerSel").addEventListener("change", onProviderChange);
+  $("detectBtn").onclick = onDetectModels;
+  $("saveSettingsBtn").onclick = onSaveSettings;
+  $("toggleKeyBtn").onclick = () => {
+    const k = $("apiKey");
+    k.type = k.type === "password" ? "text" : "password";
   };
 }
 
@@ -250,4 +449,5 @@ function bind() {
   await renderChat();
   await migrateLegacy();
   await renderChat();
+  await renderModeBanner();
 })();

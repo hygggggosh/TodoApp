@@ -1,5 +1,5 @@
-const CACHE = "muse-v3";
-const V = "?v=3";
+const CACHE = "muse-v4";
+const V = "?v=4";
 const ASSETS = [
   "./",
   "./index.html" + V,
@@ -7,6 +7,10 @@ const ASSETS = [
   "./js/db.js" + V,
   "./js/tools.js" + V,
   "./js/agent.js" + V,
+  "./js/providers.js" + V,
+  "./js/llmAgent.js" + V,
+  "./js/usage.js" + V,
+  "./js/memoryExtractor.js" + V,
   "./js/app.js" + V,
   "./legacy/",
   "./legacy/index.html",
