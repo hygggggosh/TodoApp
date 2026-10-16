@@ -21,7 +21,7 @@ export const hooks = { export: null, open: null };
 const rules = [
   {
     name: "time",
-    test: () => /^(现在)?(几点|几号|什么日期|今天日期|什么时间)/,
+    match: /^(现在)?(几点|几号|什么日期|今天日期|什么时间)/,
     run: async () => {
       const d = new Date();
       return `现在是 ${d.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}，${fmtDate(d)}。`;
@@ -29,7 +29,7 @@ const rules = [
   },
   {
     name: "task.add",
-    test: (t) => /^(添加任务|加个任务|加任务|新建任务|提醒我)[:：\s]?\s*(.+)/,
+    match: /^(添加任务|加个任务|加任务|新建任务|提醒我)[:：\s]?\s*(.+)/,
     run: async (m) => {
       const t = await T.addTask({ title: m[2].trim() });
       return `已添加任务：「${t.title}」。\n${MODE_NOTE}`;
@@ -37,7 +37,7 @@ const rules = [
   },
   {
     name: "task.done",
-    test: (t) => /^(完成|弄完)[:：\s]?\s*(.+)/,
+    match: /^(完成|弄完)[:：\s]?\s*(.+)/,
     run: async (m) => {
       const rows = await T.findTasks(m[2]);
       if (!rows.length) return `没找到「${m[2].trim()}」相关任务。`;
@@ -49,7 +49,7 @@ const rules = [
   },
   {
     name: "task.delete",
-    test: (t) => /^(删除任务|删掉任务|移除任务)[:：\s]?\s*(.+)/,
+    match: /^(删除任务|删掉任务|移除任务)[:：\s]?\s*(.+)/,
     run: async (m) => {
       const rows = await T.findTasks(m[2]);
       if (!rows.length) return `没找到「${m[2].trim()}」相关任务。`;
@@ -59,12 +59,12 @@ const rules = [
   },
   {
     name: "task.list",
-    test: (t) => /^(看|查|显示|打开)?(我的)?(任务|待办)(列表)?(怎么样|看看)?$/i,
+    match: /^(看|查|显示|打开)?(我的)?(任务|待办)(列表)?(怎么样|看看)?$/i,
     run: async () => `你的任务：\n${fmtTasks(await T.listTasks())}`
   },
   {
     name: "task.pendingcount",
-    test: (t) => /(剩下|还有|共)(多少|几)(件|个|条)?(任务|待办|事)/,
+    match: /(剩下|还有|共)(多少|几)(件|个|条)?(任务|待办|事)/,
     run: async () => {
       const n = await T.countPending();
       return n ? `还有 ${n} 个未完成任务，说「看任务」可以查看。` : "所有任务都已完成 🎉";
@@ -72,7 +72,7 @@ const rules = [
   },
   {
     name: "memory.add",
-    test: (t) => /^(记住|记一下)[:：\s]?\s*(.+)/,
+    match: /^(记住|记一下)[:：\s]?\s*(.+)/,
     run: async (m) => {
       await T.addMemory(m[2].trim(), "manual");
       return `记住了：「${m[2].trim()}」。以后你问我时我都能想起来。`;
@@ -80,7 +80,7 @@ const rules = [
   },
   {
     name: "memory.list",
-    test: (t) => /(你(知道|记得)(这些|什么|哪些)|看(一?下)?记忆|记忆(库)?(列表)?)/,
+    match: /(你(知道|记得)(这些|什么|哪些)|看(一?下)?记忆|记忆(库)?(列表)?)/,
     run: async () => {
       const ms = await T.listMemories();
       if (!ms.length) return "记忆库还是空的。开口说「记住：xxx」就会留下记忆。";
@@ -89,7 +89,7 @@ const rules = [
   },
   {
     name: "entry.add",
-    test: (t) => /^(记录|记一笔)[:：\s]?\s*(.+)/,
+    match: /^(记录|记一笔)[:：\s]?\s*(.+)/,
     run: async (m) => {
       await T.addEntry(m[2].trim());
       return `已记录。想找它的时候说「查 ${m[2].trim().slice(0, 6)}」。`;
@@ -97,7 +97,7 @@ const rules = [
   },
   {
     name: "search",
-    test: (t) => /^(查|搜索|找)(一下)?[:：\s]?\s*(.+)/,
+    match: /^(查|搜索|找)(一下)?[:：\s]?\s*(.+)/,
     run: async (m) => {
       const kw = m[3];
       const [entries, tasks] = await Promise.all([T.searchEntries(kw), T.findTasks(kw)]);
@@ -109,7 +109,7 @@ const rules = [
   },
   {
     name: "briefing",
-    test: (t) => /^(简报|总结|今日简报|今天(怎么样|过得如何))/,
+    match: /^(简报|总结|今日简报|今天(怎么样|过得如何))/,
     run: async () => {
       const pending = await T.listTasks({ includeDone: false });
       const entries = await T.listEntries(7);
@@ -122,7 +122,7 @@ const rules = [
   },
   {
     name: "export",
-    test: (t) => /^(导出数据|导出|备份数据)/,
+    match: /^(导出数据|导出|备份数据)/,
     run: async () => {
       if (hooks.export) hooks.export();
       return "已生成 JSON 备份文件并开始下载，可在网盘或文件 App 里保管。";
@@ -130,7 +130,7 @@ const rules = [
   },
   {
     name: "open.ui",
-    test: (t) => /^(打开|显示)(任务面板|记忆库|设置)/,
+    match: /^(打开|显示)(任务面板|记忆库|设置)/,
     run: async (m, ctx) => {
       const map = { 任务面板: "tasks", 记忆库: "memories", 设置: "settings" };
       const target = Object.keys(map).find(k => m[0].includes(k));
@@ -149,7 +149,7 @@ export async function handle(text) {
   const clean = text.trim();
   if (!clean) return null;
   for (const rule of rules) {
-    const m = clean.match(rule.test);
+    const m = clean.match(rule.match);
     if (m) return rule.run(m);
   }
   return FALLBACK[clean.length % FALLBACK.length];

@@ -1,4 +1,4 @@
-const CACHE = "muse-v1";
+const CACHE = "muse-v2";
 const ASSETS = [
   "./",
   "./index.html",
